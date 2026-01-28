@@ -1,0 +1,290 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, RotateCcw, X, Check, Trophy, Skull, Keyboard as KeyboardIcon, Sparkles } from 'lucide-react';
+
+// Initial word list provided by user
+const DEFAULT_WORDS = [
+  "quiet", "noisy", "cold", "hot", "dark", "bright", 
+  "crowded", "peaceful", "dangerous", "tropical", "rainy", "mysterious"
+];
+
+const MAX_MISTAKES = 6;
+
+export default function App() {
+  const [words, setWords] = useState(DEFAULT_WORDS);
+  const [targetWord, setTargetWord] = useState("");
+  const [guessedLetters, setGuessedLetters] = useState(new Set());
+  const [gameStatus, setGameStatus] = useState('playing'); // 'playing', 'won', 'lost'
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newWordInput, setNewWordInput] = useState("");
+
+  // Start a new game
+  const startNewGame = useCallback(() => {
+    const randomWord = words[Math.floor(Math.random() * words.length)];
+    setTargetWord(randomWord.toUpperCase());
+    setGuessedLetters(new Set());
+    setGameStatus('playing');
+  }, [words]);
+
+  // Initial load
+  useEffect(() => {
+    startNewGame();
+  }, [startNewGame]);
+
+  // Handle letter guess
+  const guessLetter = (letter) => {
+    if (gameStatus !== 'playing' || guessedLetters.has(letter)) return;
+
+    const newGuessed = new Set(guessedLetters);
+    newGuessed.add(letter);
+    setGuessedLetters(newGuessed);
+
+    // Check Win/Loss conditions immediately after update
+    const isLoss = Array.from(newGuessed).filter(l => !targetWord.includes(l)).length >= MAX_MISTAKES;
+    const isWin = targetWord.split('').every(l => newGuessed.has(l));
+
+    if (isLoss) setGameStatus('lost');
+    else if (isWin) setGameStatus('won');
+  };
+
+  // Keyboard press handler
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const char = e.key.toUpperCase();
+      if (/^[A-Z]$/.test(char)) {
+        guessLetter(char);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [guessedLetters, gameStatus, targetWord]);
+
+  // Add new word logic
+  const handleAddWord = (e) => {
+    e.preventDefault();
+    if (newWordInput.trim().length > 0 && /^[a-zA-Z]+$/.test(newWordInput)) {
+      setWords(prev => [...prev, newWordInput.toLowerCase()]);
+      setNewWordInput("");
+      setShowAddModal(false);
+      // Optional: Give feedback or immediately start game with new word?
+      // Let's just add it to the pool for now.
+    }
+  };
+
+  const mistakes = Array.from(guessedLetters).filter(l => !targetWord.includes(l)).length;
+
+  return (
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-4 font-sans selection:bg-indigo-500 selection:text-white">
+      
+      {/* Header */}
+      <header className="w-full max-w-2xl flex justify-between items-center mb-8 px-4">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent flex items-center gap-2">
+          <Sparkles className="text-indigo-400" /> Word Hunter
+        </h1>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-full text-sm font-medium transition-colors border border-slate-700"
+          >
+            <Plus size={16} /> Add Word
+          </button>
+          <button 
+            onClick={startNewGame}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-full text-sm font-medium transition-colors shadow-lg shadow-indigo-900/50"
+          >
+            <RotateCcw size={16} /> Restart
+          </button>
+        </div>
+      </header>
+
+      {/* Main Game Card */}
+      <div className="w-full max-w-4xl bg-slate-800/50 backdrop-blur-sm rounded-3xl p-6 md:p-12 shadow-2xl border border-slate-700 grid md:grid-cols-2 gap-12">
+        
+        {/* Left Column: Drawing & Status */}
+        <div className="flex flex-col items-center justify-center relative">
+          <div className="w-64 h-64 relative bg-slate-900/50 rounded-2xl border border-slate-700/50 flex items-center justify-center mb-6">
+            <HangmanDrawing mistakes={mistakes} />
+          </div>
+          
+          <div className="text-center">
+            <p className="text-slate-400 text-sm uppercase tracking-widest font-semibold mb-2">Attempts Remaining</p>
+            <div className="flex gap-1 justify-center">
+              {[...Array(MAX_MISTAKES)].map((_, i) => (
+                <div 
+                  key={i} 
+                  className={`h-3 w-8 rounded-full transition-all duration-300 ${i < (MAX_MISTAKES - mistakes) ? 'bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.5)]' : 'bg-slate-700'}`}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Word & Keyboard */}
+        <div className="flex flex-col justify-between h-full">
+          
+          {/* Word Display */}
+          <div className="flex flex-wrap justify-center md:justify-start gap-3 mb-12 min-h-[4rem]">
+            {targetWord.split('').map((letter, index) => (
+              <div 
+                key={index}
+                className={`w-10 h-14 md:w-12 md:h-16 flex items-end justify-center border-b-4 text-3xl md:text-4xl font-bold transition-all duration-300 
+                  ${gameStatus === 'lost' && !guessedLetters.has(letter) ? 'text-rose-400 border-rose-400/50' : 
+                    guessedLetters.has(letter) ? 'text-white border-indigo-500' : 'text-transparent border-slate-600'
+                  }`}
+              >
+                {guessedLetters.has(letter) || gameStatus === 'lost' ? letter : ''}
+              </div>
+            ))}
+          </div>
+
+          {/* Game Over Messages */}
+          {gameStatus !== 'playing' && (
+            <div className={`mb-8 p-4 rounded-xl border flex items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500
+              ${gameStatus === 'won' ? 'bg-emerald-900/30 border-emerald-500/30 text-emerald-200' : 'bg-rose-900/30 border-rose-500/30 text-rose-200'}`}>
+              {gameStatus === 'won' ? <Trophy className="w-8 h-8 flex-shrink-0" /> : <Skull className="w-8 h-8 flex-shrink-0" />}
+              <div>
+                <h3 className="font-bold text-lg">{gameStatus === 'won' ? 'Victory!' : 'Game Over'}</h3>
+                <p className="opacity-80">
+                  {gameStatus === 'won' ? 'You solved the word correctly.' : `The word was "${targetWord}". Better luck next time!`}
+                </p>
+              </div>
+              <button onClick={startNewGame} className="ml-auto bg-white/10 hover:bg-white/20 p-2 rounded-lg transition-colors">
+                <RotateCcw size={20} />
+              </button>
+            </div>
+          )}
+
+          {/* Keyboard */}
+          <div className="grid grid-cols-7 gap-1 md:gap-2">
+            {"ABCDEFGHIJKLMNOPQRSTUVWXYZ".split('').map((letter) => {
+              const isGuessed = guessedLetters.has(letter);
+              const isCorrect = targetWord.includes(letter);
+              
+              let btnClass = "bg-slate-700 hover:bg-slate-600 text-slate-300";
+              if (isGuessed) {
+                btnClass = isCorrect 
+                  ? "bg-emerald-600 text-white border-emerald-500 opacity-50 cursor-not-allowed" 
+                  : "bg-slate-800 text-slate-600 opacity-50 cursor-not-allowed";
+              }
+
+              return (
+                <button
+                  key={letter}
+                  disabled={isGuessed || gameStatus !== 'playing'}
+                  onClick={() => guessLetter(letter)}
+                  className={`
+                    aspect-square rounded-lg text-sm md:text-base font-bold transition-all duration-200
+                    flex items-center justify-center border-b-4 border-transparent active:border-b-0 active:translate-y-1
+                    ${btnClass}
+                  `}
+                >
+                  {letter}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Add Word Modal Overlay */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-800 border border-slate-700 w-full max-w-md p-6 rounded-2xl shadow-2xl relative">
+            <button 
+              onClick={() => setShowAddModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+            >
+              <X size={20} />
+            </button>
+            
+            <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+              <Plus className="text-indigo-400" /> Add New Word
+            </h2>
+            <p className="text-slate-400 text-sm mb-6">
+              Enter a new word to add to the game's vocabulary. It will appear in future rounds.
+            </p>
+
+            <form onSubmit={handleAddWord}>
+              <div className="relative mb-4">
+                <input
+                  type="text"
+                  value={newWordInput}
+                  onChange={(e) => setNewWordInput(e.target.value)}
+                  placeholder="e.g. Thunderstorm"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  autoFocus
+                />
+              </div>
+              <div className="flex justify-end gap-3">
+                <button 
+                  type="button" 
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 text-slate-400 hover:text-white transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={!newWordInput.trim()}
+                  className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded-xl font-medium transition-colors shadow-lg shadow-indigo-900/50"
+                >
+                  Add Word
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Simple SVG Drawing Component
+function HangmanDrawing({ mistakes }) {
+  // Stroke styling
+  const stroke = "stroke-indigo-400";
+  const strokeWidth = "4";
+  const strokeLinecap = "round";
+
+  return (
+    <svg viewBox="0 0 100 100" className="w-full h-full p-4 overflow-visible">
+      {/* Base */}
+      <line x1="10" y1="95" x2="90" y2="95" className="stroke-slate-600" strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} />
+      {/* Vertical Post */}
+      <line x1="30" y1="95" x2="30" y2="5" className="stroke-slate-600" strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} />
+      {/* Horizontal Post */}
+      <line x1="30" y1="5" x2="70" y2="5" className="stroke-slate-600" strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} />
+      {/* Rope */}
+      <line x1="70" y1="5" x2="70" y2="20" className="stroke-slate-600" strokeWidth={strokeWidth} />
+
+      {/* Head */}
+      {mistakes >= 1 && (
+        <circle cx="70" cy="30" r="10" className={`${stroke} fill-transparent transition-all duration-500 dash-draw`} strokeWidth={strokeWidth} />
+      )}
+      
+      {/* Body */}
+      {mistakes >= 2 && (
+        <line x1="70" y1="40" x2="70" y2="70" className={`${stroke} transition-all duration-500`} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} />
+      )}
+
+      {/* Left Arm */}
+      {mistakes >= 3 && (
+        <line x1="70" y1="50" x2="50" y2="60" className={`${stroke} transition-all duration-500`} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} />
+      )}
+
+      {/* Right Arm */}
+      {mistakes >= 4 && (
+        <line x1="70" y1="50" x2="90" y2="60" className={`${stroke} transition-all duration-500`} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} />
+      )}
+
+      {/* Left Leg */}
+      {mistakes >= 5 && (
+        <line x1="70" y1="70" x2="55" y2="90" className={`${stroke} transition-all duration-500`} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} />
+      )}
+
+      {/* Right Leg */}
+      {mistakes >= 6 && (
+        <line x1="70" y1="70" x2="85" y2="90" className={`${stroke} transition-all duration-500`} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} />
+      )}
+    </svg>
+  );
+}
