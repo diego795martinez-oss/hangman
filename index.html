@@ -61,38 +61,36 @@
         const MAX_MISTAKES = 6;
 
         function App() {
-            // Start with empty words and 'setup' status
             const [words, setWords] = useState([]);
+            const [playedWords, setPlayedWords] = useState(new Set());
             const [gameStatus, setGameStatus] = useState('setup'); // 'setup', 'playing', 'won', 'lost'
             
             const [targetWord, setTargetWord] = useState("");
             const [guessedLetters, setGuessedLetters] = useState(new Set());
             const [setupInput, setSetupInput] = useState("");
             
-            // Handle parsing the setup list
             const handleSetupSubmit = (e) => {
                 e.preventDefault();
                 // Split by comma, new line, or space
                 const rawWords = setupInput.split(/[\n, ]+/);
+                
+                // Allow letters AND hyphens now
                 const cleanWords = rawWords
                     .map(w => w.trim().toLowerCase())
-                    .filter(w => w.length > 0 && /^[a-zA-Z]+$/.test(w));
+                    .filter(w => w.length > 0 && /^[a-zA-Z-]+$/.test(w));
                 
                 if (cleanWords.length === 0) {
-                    alert("Please enter at least one valid word (letters A-Z only).");
+                    alert("Please enter at least one valid word (letters A-Z and hyphens allowed).");
                     return;
                 }
 
-                if (cleanWords.length < rawWords.length) {
-                    // Optional: You could alert here that some words were dropped
-                    // console.log("Some words were dropped due to invalid characters");
-                }
-
                 setWords(cleanWords);
+                setPlayedWords(new Set()); // Reset played history
                 
-                // Start the first game immediately with these words
+                // Start first game
                 const randomWord = cleanWords[Math.floor(Math.random() * cleanWords.length)];
                 setTargetWord(randomWord.toUpperCase());
+                setPlayedWords(new Set([randomWord])); // Mark first word as played
                 setGuessedLetters(new Set());
                 setGameStatus('playing');
             };
@@ -103,24 +101,36 @@
                     return;
                 }
                 
-                // Try to get a word that isn't the current one (if possible)
-                let randomWord;
-                if (words.length > 1) {
-                    do {
-                        randomWord = words[Math.floor(Math.random() * words.length)];
-                    } while (randomWord.toUpperCase() === targetWord);
-                } else {
-                    randomWord = words[0];
+                // Filter to find words that haven't been played yet
+                let availableWords = words.filter(w => !playedWords.has(w));
+                let wasReset = false;
+
+                // If all words have been played, reset the history
+                if (availableWords.length === 0) {
+                    availableWords = words;
+                    wasReset = true;
+                    // Optional: You could show a notification here "List restarted!"
                 }
 
+                const randomWord = availableWords[Math.floor(Math.random() * availableWords.length)];
                 setTargetWord(randomWord.toUpperCase());
+                
+                // Update history
+                setPlayedWords(prev => {
+                    if (wasReset) return new Set([randomWord]);
+                    const newSet = new Set(prev);
+                    newSet.add(randomWord);
+                    return newSet;
+                });
+
                 setGuessedLetters(new Set());
                 setGameStatus('playing');
-            }, [words, targetWord]);
+            }, [words, playedWords]);
 
             const returnToSetup = () => {
                 setGameStatus('setup');
                 setWords([]);
+                setPlayedWords(new Set());
                 setTargetWord("");
             };
 
@@ -131,8 +141,9 @@
                 newGuessed.add(letter);
                 setGuessedLetters(newGuessed);
 
+                // Win logic: Every letter must be guessed OR be a hyphen
                 const isLoss = Array.from(newGuessed).filter(l => !targetWord.includes(l)).length >= MAX_MISTAKES;
-                const isWin = targetWord.split('').every(l => newGuessed.has(l));
+                const isWin = targetWord.split('').every(l => newGuessed.has(l) || l === '-');
 
                 if (isLoss) setGameStatus('lost');
                 else if (isWin) setGameStatus('won');
@@ -140,7 +151,7 @@
 
             useEffect(() => {
                 const handleKeyDown = (e) => {
-                    if (gameStatus === 'setup') return; // Don't capture keys in setup mode
+                    if (gameStatus === 'setup') return; 
                     const char = e.key.toUpperCase();
                     if (/^[A-Z]$/.test(char)) {
                         guessLetter(char);
@@ -172,13 +183,13 @@
                                 <p className="text-slate-400 text-sm mb-4">
                                     Enter the words you want to play with.
                                     <br/>
-                                    <span className="text-indigo-400 text-xs">Note: Only letters A-Z are allowed. Numbers and spaces will cause words to be ignored.</span>
+                                    <span className="text-indigo-400 text-xs">Letters A-Z and hyphens (-) are allowed.</span>
                                 </p>
                                 
                                 <textarea
                                     value={setupInput}
                                     onChange={(e) => setSetupInput(e.target.value)}
-                                    placeholder="example: banana, apple, strawberry, dragonfruit"
+                                    placeholder="example: merry-go-round, ice-cream, banana"
                                     className="w-full h-40 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all mb-6 resize-none font-mono text-sm"
                                 ></textarea>
 
@@ -212,7 +223,6 @@
                         <Settings size={16} /> <span className="hidden sm:inline">New List</span>
                     </button>
                     
-                    {/* NEXT WORD BUTTON */}
                     <button 
                         onClick={startNewGame}
                         className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 md:px-4 md:py-2 rounded-full text-xs md:text-sm font-medium transition-colors shadow-lg shadow-indigo-900/50"
@@ -249,17 +259,21 @@
                     
                     {/* Word Display */}
                     <div className="flex flex-wrap justify-center md:justify-start gap-2 md:gap-3 mb-8 md:mb-12 min-h-[4rem]">
-                        {targetWord.split('').map((letter, index) => (
-                        <div 
-                            key={index}
-                            className={`w-8 h-12 md:w-12 md:h-16 flex items-end justify-center border-b-4 text-2xl md:text-4xl font-bold transition-all duration-300 
-                            ${gameStatus === 'lost' && !guessedLetters.has(letter) ? 'text-rose-400 border-rose-400/50' : 
-                                guessedLetters.has(letter) ? 'text-white border-indigo-500' : 'text-transparent border-slate-600'
-                            }`}
-                        >
-                            {guessedLetters.has(letter) || gameStatus === 'lost' ? letter : ''}
-                        </div>
-                        ))}
+                        {targetWord.split('').map((letter, index) => {
+                            const isHyphen = letter === '-';
+                            return (
+                                <div 
+                                    key={index}
+                                    className={`w-8 h-12 md:w-12 md:h-16 flex items-end justify-center border-b-4 text-2xl md:text-4xl font-bold transition-all duration-300 
+                                    ${
+                                        (gameStatus === 'lost' && !guessedLetters.has(letter) && !isHyphen) ? 'text-rose-400 border-rose-400/50' : 
+                                        (guessedLetters.has(letter) || isHyphen) ? 'text-white border-indigo-500' : 'text-transparent border-slate-600'
+                                    }`}
+                                >
+                                    {guessedLetters.has(letter) || isHyphen || gameStatus === 'lost' ? letter : ''}
+                                </div>
+                            );
+                        })}
                     </div>
 
                     {/* Game Over Messages */}
